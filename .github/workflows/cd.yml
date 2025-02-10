@@ -1,11 +1,12 @@
 name: CD
 
 on:
-    pull_request:
-        types:
-        - closed 
-        branches:
-        - main   
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -23,23 +24,36 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install pyngrok
 
-    - name: Start FastAPI server in background
-      run: |
-        nohup uvicorn main:app --host 0.0.0.0 --port 8000 &
-
-    - name: Install ngrok
-      run: pip install pyngrok
-
-    - name: Start ngrok tunnel
+    - name: Start server and ngrok
       env:
         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
       run: |
+        # Start FastAPI server in the background
+        uvicorn main:app --host 0.0.0.0 --port 8000 &
+        SERVER_PID=$!
+
+        # Set up and start ngrok tunnel
         ngrok config add-authtoken $NGROK_AUTH_TOKEN
         ngrok http 8000 > ngrok.log &
-        sleep 5
-        curl http://localhost:4040/api/tunnels
+        NGROK_PID=$!
 
-    - name: Display Public URL
-      run: |
-        curl http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url'
+        # Wait for server to start
+        sleep 5
+
+        # Wait for ngrok tunnel to be established
+        echo "Waiting for ngrok tunnel..."
+        while ! curl -s http://localhost:4040/api/tunnels > /dev/null; do
+          sleep 1
+        done
+
+        # Retrieve and display the public URL
+        NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+        echo "Public URL: $NGROK_URL"
+
+        # Keep the processes running for 1 hour (3600 seconds)
+        sleep 3600
+
+        # Cleanup (optional)
+        kill $SERVER_PID $NGROK_PID
