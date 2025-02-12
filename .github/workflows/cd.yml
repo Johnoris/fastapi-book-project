@@ -13,47 +13,33 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v2
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.5.4
       with:
-        python-version: '3.11'
+        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
-    - name: Install dependencies
+    - name: Deploy to EC2
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyngrok
+        ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+          sudo apt update && sudo apt install -y python3-pip nginx
+          sudo systemctl stop app.service || true
+          rm -rf ~/app
+          mkdir ~/app
+          exit
+        EOF
 
-    - name: Start server and ngrok
-      env:
-        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
-      run: |
-        # Start FastAPI server in the background
-        uvicorn main:app --host 0.0.0.0 --port 8000 &
-        SERVER_PID=$!
+        scp -r app ubuntu@${{ secrets.EC2_PUBLIC_IP }}:~/
 
-        # Set up and start ngrok tunnel
-        ngrok config add-authtoken $NGROK_AUTH_TOKEN
-        ngrok http 8000 > ngrok.log &
-        NGROK_PID=$!
+        ssh ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+          pip3 install fastapi uvicorn
+          sudo mv ~/app.service /etc/systemd/system/app.service
+          sudo systemctl daemon-reload
+          sudo systemctl start app.service
+          sudo systemctl enable app.service
 
-        # Wait for server to start
-        sleep 5
-
-        # Wait for ngrok tunnel to be established
-        echo "Waiting for ngrok tunnel..."
-        while ! curl -s http://localhost:4040/api/tunnels > /dev/null; do
-          sleep 1
-        done
-
-        # Retrieve and display the public URL
-        NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
-        echo "Public URL: $NGROK_URL"
-
-        # Keep the processes running for 1 hour (3600 seconds)
-        sleep 3600
-
-        # Cleanup (optional)
-        kill $SERVER_PID $NGROK_PID
+          sudo mv ~/nginx.conf /etc/nginx/sites-available/fastapi
+          sudo ln -sf /etc/nginx/sites-available/fastapi /etc/nginx/sites-enabled/
+          sudo nginx -t && sudo systemctl restart nginx
+        EOF
