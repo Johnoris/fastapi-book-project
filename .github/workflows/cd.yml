@@ -10,36 +10,17 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-
-    - name: Set up SSH
-      uses: webfactory/ssh-agent@v0.5.4
-      with:
-        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
     - name: Deploy to EC2
-      run: |
-        ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
-          sudo apt update && sudo apt install -y python3-pip nginx
-          sudo systemctl stop app.service || true
-          rm -rf ~/app
-          mkdir ~/app
-          exit
-        EOF
-
-        scp -r app ubuntu@${{ secrets.EC2_PUBLIC_IP }}:~/
-
-        ssh ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
-          pip3 install fastapi uvicorn
-          sudo mv ~/app.service /etc/systemd/system/app.service
-          sudo systemctl daemon-reload
-          sudo systemctl start app.service
-          sudo systemctl enable app.service
-
-          sudo mv ~/nginx.conf /etc/nginx/sites-available/fastapi
-          sudo ln -sf /etc/nginx/sites-available/fastapi /etc/nginx/sites-enabled/
-          sudo nginx -t && sudo systemctl restart nginx
-        EOF
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          cd /home/ubuntu/fastapi-book-project
+          git pull origin main
+          source venv/bin/activate
+          pip install -r requirements.txt
+          sudo systemctl restart fastapi
+          sudo systemctl reload nginx
