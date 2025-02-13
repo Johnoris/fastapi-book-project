@@ -25,13 +25,10 @@ jobs:
         echo "$SSH_KEY" > ~/.ssh/ec2_key
         chmod 400 ~/.ssh/ec2_key
 
-        # Copy files to EC2
-        scp -o StrictHostKeyChecking=no -i ~/.ssh/ec2_key -r . ${EC2_USER}@${EC2_HOST}:/home/ubuntu/fastapi-book-project
-
-        # Run deployment commands
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/ec2_key ${EC2_USER}@${EC2_HOST} << EOF
-          cd /home/ubuntu/fastapi-ook-project
-          git reset --hard HEAD
+        # Run deployment commands via SSH
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/ec2_key ${EC2_USER}@${EC2_HOST} << 'EOF'
+          cd /home/ubuntu/fastapi-book-project
+          git pull origin main
           python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
