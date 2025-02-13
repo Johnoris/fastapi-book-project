@@ -18,16 +18,16 @@ jobs:
         uses: actions/checkout@v3    
 
       - name: Build docker image
-        run: docker build -t python-app .
+        run: sudo docker build -t python-app .
         
 
       - name: Delete old container
-        run: docker rm -f python-app  || true
+        run: sudo docker rm -f python-app  || true
 
         
       - name: Run docker container
-        run: docker run -d -p 7001:7001 --name python-app python-app 
+        run: sudo docker run -d -p 7001:7001 --name python-app python-app 
 
         
       - name: Clean up space
-        run: docker system prune -a -f
+        run: sudo docker system prune -a -f
