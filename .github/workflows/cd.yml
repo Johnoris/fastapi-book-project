@@ -11,17 +11,30 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        port: ${{ secrets.PORT }}
-        script: |
-          cd /home/ubuntu/fastapi-book-project
-          git pull origin main
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy via SSH
+      env:
+        SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        EC2_USER: ${{ secrets.EC2_USER }}
+        EC2_HOST: ${{ secrets.EC2_HOST }}
+      run: |
+        # Create SSH directory and key file
+        mkdir -p ~/.ssh
+        echo "$SSH_KEY" > ~/.ssh/ec2_key
+        chmod 600 ~/.ssh/ec2_key
+
+        # Copy files to EC2
+        scp -o StrictHostKeyChecking=no -i ~/.ssh/ec2_key -r . ${EC2_USER}@${EC2_HOST}:/home/ubuntu/your-fastapi-app
+
+        # Run deployment commands
+        ssh -o StrictHostKeyChecking=no -i ~/.ssh/ec2_key ${EC2_USER}@${EC2_HOST} << EOF
+          cd /home/ubuntu/your-fastapi-app
+          git reset --hard HEAD
+          python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
           sudo systemctl restart fastapi
           sudo systemctl reload nginx
+        EOF
